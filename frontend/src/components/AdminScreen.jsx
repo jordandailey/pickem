@@ -4,7 +4,6 @@ import { api } from '../utils/api';
 export default function AdminScreen({ week, onWeekUpdated, showToast }) {
   const [panel, setPanel] = useState('home');
   const [players, setPlayers] = useState([]);
-  const [seasons, setSeason] = useState(null);
 
   useEffect(() => { if (panel === 'players') loadPlayers(); }, [panel]);
 
@@ -12,7 +11,8 @@ export default function AdminScreen({ week, onWeekUpdated, showToast }) {
     try { setPlayers(await api.get('/admin/players')); } catch (err) { showToast(err.message, 'error'); }
   }
 
-  if (panel === 'week') return <WeekSetup week={week} onWeekUpdated={() => { onWeekUpdated(); setPanel('home'); }} showToast={showToast} onBack={() => setPanel('home')} />;
+  if (panel === 'week') return <WeekSetup existingWeek={null} onWeekUpdated={() => { onWeekUpdated(); setPanel('home'); }} showToast={showToast} onBack={() => setPanel('home')} />;
+  if (panel === 'editweek') return <WeekSetup existingWeek={week} onWeekUpdated={() => { onWeekUpdated(); setPanel('home'); }} showToast={showToast} onBack={() => setPanel('home')} />;
   if (panel === 'games') return <GameEntry week={week} onDone={() => { onWeekUpdated(); setPanel('home'); }} showToast={showToast} onBack={() => setPanel('home')} />;
   if (panel === 'scores') return <ScoreEntry week={week} onDone={() => { onWeekUpdated(); setPanel('home'); }} showToast={showToast} onBack={() => setPanel('home')} />;
   if (panel === 'players') return <PlayerManager players={players} onDone={loadPlayers} showToast={showToast} onBack={() => setPanel('home')} />;
@@ -24,12 +24,22 @@ export default function AdminScreen({ week, onWeekUpdated, showToast }) {
 
       {week && (
         <div className="card" style={{padding:'12px', marginBottom:'10px'}}>
-          <div style={{fontSize:'13px', fontWeight:'500', marginBottom:'4px'}}>Active week</div>
-          <div style={{fontSize:'12px', color:'var(--sub)'}}>
-            NFL Wk {week.nfl_week} · {week.games?.length || 0} games · Deadline: {week.submission_deadline ? new Date(week.submission_deadline).toLocaleString() : 'not set'}
-          </div>
-          <div style={{fontSize:'12px', color: week.picks_locked ? 'var(--red)' : 'var(--green)', marginTop:'4px'}}>
-            Picks: {week.picks_locked ? '🔒 Locked' : '🟢 Open'}
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}>
+            <div>
+              <div style={{fontSize:'13px', fontWeight:'500', marginBottom:'4px'}}>Active week</div>
+              <div style={{fontSize:'12px', color:'var(--sub)'}}>
+                NFL Wk {week.nfl_week} · CFB Wk {week.cfb_week} · {week.games?.length || 0} games
+              </div>
+              <div style={{fontSize:'12px', color:'var(--sub)', marginTop:'2px'}}>
+                Deadline: {week.submission_deadline ? new Date(week.submission_deadline).toLocaleString() : 'not set'}
+              </div>
+              <div style={{fontSize:'12px', color: week.picks_locked ? 'var(--red)' : 'var(--green)', marginTop:'4px'}}>
+                Picks: {week.picks_locked ? '🔒 Locked' : '🟢 Open'}
+              </div>
+            </div>
+            <button className="btn btn-secondary" style={{fontSize:'12px', padding:'5px 12px', flexShrink:0}} onClick={() => setPanel('editweek')}>
+              Edit
+            </button>
           </div>
         </div>
       )}
@@ -74,18 +84,23 @@ export default function AdminScreen({ week, onWeekUpdated, showToast }) {
   );
 }
 
-function WeekSetup({ week, onWeekUpdated, showToast, onBack }) {
-  const [form, setForm] = useState({ nfl_week: '', cfb_week: '', label: '', submission_deadline: '', quarter_id: '' });
-  const [quarters, setQuarters] = useState([]);
-  const [saving, setSaving] = useState(false);
+function toLocalDatetime(isoStr) {
+  if (!isoStr) return '';
+  const d = new Date(isoStr);
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
-  useEffect(() => {
-    api.get('/weeks').then(weeks => {
-      // Extract quarters from weeks data if available
-    }).catch(() => {});
-    // Load quarters
-    api.get('/weeks').then(() => {}).catch(() => {});
-  }, []);
+function WeekSetup({ existingWeek, onWeekUpdated, showToast, onBack }) {
+  const isEdit = !!existingWeek;
+  const [form, setForm] = useState({
+    nfl_week: existingWeek?.nfl_week || '',
+    cfb_week: existingWeek?.cfb_week || '',
+    label: existingWeek?.label || '',
+    submission_deadline: toLocalDatetime(existingWeek?.submission_deadline),
+    quarter_id: existingWeek?.quarter_id || '',
+  });
+  const [saving, setSaving] = useState(false);
 
   async function save() {
     if (!form.nfl_week || !form.cfb_week || !form.submission_deadline) {
@@ -98,8 +113,13 @@ function WeekSetup({ week, onWeekUpdated, showToast, onBack }) {
         quarter_id: form.quarter_id || null,
         submission_deadline: new Date(form.submission_deadline).toISOString(),
       };
-      await api.post('/weeks', payload);
-      showToast('Week created!');
+      if (isEdit) {
+        await api.put(`/weeks/${existingWeek.id}`, payload);
+        showToast('Week updated!');
+      } else {
+        await api.post('/weeks', payload);
+        showToast('Week created!');
+      }
       onWeekUpdated();
     } catch (err) { showToast(err.message, 'error'); }
     finally { setSaving(false); }
@@ -109,7 +129,7 @@ function WeekSetup({ week, onWeekUpdated, showToast, onBack }) {
     <div>
       <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'16px'}}>
         <button className="btn btn-secondary" onClick={onBack}>← Back</button>
-        <p className="sec-label" style={{margin:0}}>Set up new week</p>
+        <p className="sec-label" style={{margin:0}}>{isEdit ? 'Edit active week' : 'Set up new week'}</p>
       </div>
       <div className="card" style={{padding:'16px'}}>
         {[
@@ -135,7 +155,7 @@ function WeekSetup({ week, onWeekUpdated, showToast, onBack }) {
           </select>
         </div>
         <button className="btn btn-primary btn-full" onClick={save} disabled={saving}>
-          {saving ? 'Creating...' : 'Create Week & Set as Active'}
+          {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Week & Set as Active'}
         </button>
       </div>
     </div>
@@ -151,7 +171,11 @@ function GameEntry({ week, onDone, showToast, onBack }) {
     if (!form.away_team || !form.home_team) return showToast('Enter both team names', 'error');
     setSaving(true);
     try {
-      const game = await api.post(`/weeks/${week.id}/games`, form);
+      const payload = {
+        ...form,
+        game_time: form.game_time ? new Date(form.game_time).toISOString() : null,
+      };
+      const game = await api.post(`/weeks/${week.id}/games`, payload);
       setGames(g => [...g, game]);
       setForm(f => ({ ...f, away_team: '', home_team: '', away_record: '', home_record: '', game_time: '', tv_network: '', spread_away: '', spread_home: '', total: '' }));
       showToast('Game added');
@@ -175,19 +199,17 @@ function GameEntry({ week, onDone, showToast, onBack }) {
         <button className="btn btn-secondary" onClick={onBack}>← Back</button>
         <p className="sec-label" style={{margin:0}}>Games · NFL Wk {week.nfl_week}</p>
       </div>
-
       {games.map(g => (
-        <div key={g.id} className="card" style={{padding:'10px 12px', display:'flex', alignItems:'center', justifyContent:'space-between'}}>
+        <div key={g.id} className="card" style={{padding:'10px 12px', display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'6px'}}>
           <div>
             <div style={{fontSize:'13px', fontWeight:'500'}}>{g.away_team} @ {g.home_team}</div>
             <div style={{fontSize:'11px', color:'var(--hint)'}}>
-              {g.game_type} · {g.conference} · Spread: {g.spread_away}/{g.spread_home} · O/U: {g.total}
+              {g.game_type} · {g.conference} · {g.spread_away > 0 ? '+' : ''}{g.spread_away}/{g.spread_home > 0 ? '+' : ''}{g.spread_home} · O/U {g.total}
             </div>
           </div>
           <button className="btn btn-danger" style={{padding:'5px 10px', fontSize:'12px'}} onClick={() => removeGame(g.id)}>Remove</button>
         </div>
       ))}
-
       <div className="card" style={{padding:'16px', marginTop:'8px'}}>
         <p className="sec-label">Add game</p>
         <div className="form-group">
@@ -210,11 +232,11 @@ function GameEntry({ week, onDone, showToast, onBack }) {
         <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px'}}>
           <div className="form-group">
             <label className="form-label">Away team</label>
-            <input className="form-input" value={form.away_team} onChange={e => setForm(p => ({...p, away_team: e.target.value}))} placeholder="e.g. Chiefs" />
+            <input className="form-input" value={form.away_team} onChange={e => setForm(p => ({...p, away_team: e.target.value}))} placeholder="Chiefs" />
           </div>
           <div className="form-group">
             <label className="form-label">Home team</label>
-            <input className="form-input" value={form.home_team} onChange={e => setForm(p => ({...p, home_team: e.target.value}))} placeholder="e.g. Raiders" />
+            <input className="form-input" value={form.home_team} onChange={e => setForm(p => ({...p, home_team: e.target.value}))} placeholder="Raiders" />
           </div>
           <div className="form-group">
             <label className="form-label">Away record</label>
@@ -266,7 +288,9 @@ function ScoreEntry({ week, onDone, showToast, onBack }) {
 
   async function submitScore(game) {
     const s = scores[game.id];
-    if (s?.away_score === undefined || s?.home_score === undefined) return showToast('Enter both scores', 'error');
+    if (!s || s.away_score === '' || s.away_score === undefined || s.home_score === '' || s.home_score === undefined) {
+      return showToast('Enter both scores', 'error');
+    }
     setSaving(game.id);
     try {
       const res = await api.put(`/weeks/${week.id}/games/${game.id}/score`, {
@@ -301,9 +325,7 @@ function ScoreEntry({ week, onDone, showToast, onBack }) {
             <span style={{fontSize:'11px', color:'var(--hint)', fontWeight:'400', marginLeft:'8px'}}>{g.game_type}</span>
           </div>
           {g.status === 'final' ? (
-            <div style={{fontSize:'13px', color:'var(--green)'}}>
-              ✓ Final: {g.away_score} – {g.home_score}
-            </div>
+            <div style={{fontSize:'13px', color:'var(--green)'}}>✓ Final: {g.away_score} – {g.home_score}</div>
           ) : g.status === 'cancelled' ? (
             <div style={{fontSize:'13px', color:'var(--red)'}}>Voided</div>
           ) : (
@@ -326,9 +348,7 @@ function ScoreEntry({ week, onDone, showToast, onBack }) {
                 <button className="btn btn-primary" style={{flex:1}} onClick={() => submitScore(g)} disabled={saving === g.id}>
                   {saving === g.id ? 'Grading...' : 'Submit & Grade'}
                 </button>
-                <button className="btn btn-secondary" onClick={() => voidGame(g)} disabled={saving === g.id}>
-                  Void
-                </button>
+                <button className="btn btn-secondary" onClick={() => voidGame(g)} disabled={saving === g.id}>Void</button>
               </div>
             </>
           )}
@@ -373,7 +393,6 @@ function PlayerManager({ players, onDone, showToast, onBack }) {
         <button className="btn btn-secondary" onClick={onBack}>← Back</button>
         <button className="btn btn-primary" onClick={() => setAdding(a => !a)}>+ Add player</button>
       </div>
-
       {adding && (
         <div className="card" style={{padding:'16px', marginBottom:'10px'}}>
           <p className="sec-label">New player</p>
@@ -393,7 +412,6 @@ function PlayerManager({ players, onDone, showToast, onBack }) {
           </button>
         </div>
       )}
-
       {players.map(p => (
         <div key={p.id} className="card" style={{padding:'10px 12px', marginBottom:'6px'}}>
           <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
@@ -403,9 +421,7 @@ function PlayerManager({ players, onDone, showToast, onBack }) {
             </div>
             {!p.is_admin && (
               <button className="btn btn-secondary" style={{fontSize:'12px', padding:'5px 10px'}}
-                onClick={() => setResetId(resetId === p.id ? null : p.id)}>
-                Reset PW
-              </button>
+                onClick={() => setResetId(resetId === p.id ? null : p.id)}>Reset PW</button>
             )}
           </div>
           {resetId === p.id && (
@@ -448,18 +464,18 @@ function SeasonSettings({ showToast, onBack }) {
       </div>
       <div className="card" style={{padding:'16px'}}>
         {[
-          { key: 'entry_fee', label: 'Entry fee ($)', type: 'number' },
-          { key: 'grand_prize', label: 'Grand prize ($)', type: 'number' },
-          { key: 'second_prize', label: '2nd place prize ($)', type: 'number' },
-          { key: 'quarterly_prize', label: 'Quarterly prize ($)', type: 'number' },
-          { key: 'picks_per_week', label: 'Picks per week', type: 'number' },
-          { key: 'point_win', label: 'Points for a win', type: 'number' },
-          { key: 'point_lock_win', label: 'Points for a Lock win', type: 'number' },
-          { key: 'point_push', label: 'Points for a push', type: 'number' },
+          { key: 'entry_fee', label: 'Entry fee ($)' },
+          { key: 'grand_prize', label: 'Grand prize ($)' },
+          { key: 'second_prize', label: '2nd place prize ($)' },
+          { key: 'quarterly_prize', label: 'Quarterly prize ($)' },
+          { key: 'picks_per_week', label: 'Picks per week' },
+          { key: 'point_win', label: 'Points for a win' },
+          { key: 'point_lock_win', label: 'Points for a Lock win' },
+          { key: 'point_push', label: 'Points for a push' },
         ].map(f => (
           <div key={f.key} className="form-group">
             <label className="form-label">{f.label}</label>
-            <input className="form-input" type={f.type} step="0.5"
+            <input className="form-input" type="number" step="0.5"
               value={settings[f.key] ?? ''} onChange={e => setSettings(s => ({...s, [f.key]: e.target.value}))} />
           </div>
         ))}
