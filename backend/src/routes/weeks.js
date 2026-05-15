@@ -76,8 +76,8 @@ router.post('/', authMiddleware, adminMiddleware, async (req, res) => {
 
     const { rows } = await pool.query(`
       INSERT INTO weeks (season_id, quarter_id, nfl_week, cfb_week, label, submission_deadline, is_active)
-      VALUES ($1, $2, $3, $4, $5, $6, true) RETURNING *
-    `, [season_id, quarter_id, nfl_week, cfb_week, label, submission_deadline]);
+      VALUES ($1, $2::uuid, $3, $4, $5, $6::timestamptz, true) RETURNING *
+    `, [season_id, quarter_id || null, nfl_week, cfb_week, label || null, submission_deadline]);
 
     res.json(rows[0]);
   } catch (err) {
