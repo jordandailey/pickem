@@ -88,9 +88,17 @@ function WeekSetup({ week, onWeekUpdated, showToast, onBack }) {
   }, []);
 
   async function save() {
+    if (!form.nfl_week || !form.cfb_week || !form.submission_deadline) {
+      return showToast('NFL week, CFB week and deadline are required', 'error');
+    }
     setSaving(true);
     try {
-      await api.post('/weeks', form);
+      const payload = {
+        ...form,
+        quarter_id: form.quarter_id || null,
+        submission_deadline: new Date(form.submission_deadline).toISOString(),
+      };
+      await api.post('/weeks', payload);
       showToast('Week created!');
       onWeekUpdated();
     } catch (err) { showToast(err.message, 'error'); }
