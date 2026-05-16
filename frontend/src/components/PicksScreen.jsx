@@ -7,28 +7,22 @@ function isDeadlinePassed(week) {
 }
 
 export default function PicksScreen({ week, myPicks, onPicksSubmitted, showToast }) {
-  const [selections, setSelections] = useState({}); // key: `${gameId}_${type}` val: {side, label, picked_team}
+  const [selections, setSelections] = useState({});
   const [lockKey, setLockKey] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
   const locked = isDeadlinePassed(week);
   const selCount = Object.keys(selections).length;
   const maxPicks = week?.picks_per_week || 5;
+  const readyToSubmit = selCount === maxPicks && lockKey;
 
-  // Pre-fill from existing picks
   useEffect(() => {
     if (!myPicks?.length || !week) return;
     const existing = {};
     let existingLock = null;
     for (const p of myPicks) {
       const key = `${p.game_id}_${p.pick_type}`;
-      existing[key] = {
-        side: p.picked_team,
-        label: p.picked_team,
-        picked_team: p.picked_team,
-        pick_type: p.pick_type,
-        game_id: p.game_id
-      };
+      existing[key] = { side: p.picked_team, label: p.picked_team, picked_team: p.picked_team, pick_type: p.pick_type, game_id: p.game_id };
       if (p.is_lock) existingLock = key;
     }
     setSelections(existing);
@@ -50,20 +44,8 @@ export default function PicksScreen({ week, myPicks, onPicksSubmitted, showToast
     });
   }
 
-  function removePick(key) {
-    setSelections(prev => { const n = { ...prev }; delete n[key]; return n; });
-    if (lockKey === key) setLockKey(null);
-  }
-
-  function toggleLock(gameId) {
-    const gameKeys = Object.keys(selections).filter(k => k.startsWith(gameId + '_'));
-    if (!gameKeys.length) return;
-    const key = gameKeys[0];
-    setLockKey(prev => prev === key ? null : key);
-  }
-
   async function handleSubmit() {
-    if (selCount !== maxPicks || !lockKey) return;
+    if (!readyToSubmit) return;
     setSubmitting(true);
     try {
       const picksPayload = Object.entries(selections).map(([key, val]) => ({
@@ -87,17 +69,17 @@ export default function PicksScreen({ week, myPicks, onPicksSubmitted, showToast
   const nflGames = week.games?.filter(g => g.game_type === 'NFL') || [];
 
   function GameCard({ game }) {
-    const spreadKeyA = `${game.id}_spread`;
-    const ouKeyO = `${game.id}_over`;
-    const ouKeyU = `${game.id}_under`;
+    const spreadKey = `${game.id}_spread`;
+    const overKey = `${game.id}_over`;
+    const underKey = `${game.id}_under`;
 
-    const spreadSelA = selections[spreadKeyA];
-    const ouSelO = selections[ouKeyO];
-    const ouSelU = selections[ouKeyU];
+    const spreadSel = selections[spreadKey];
+    const overSel = selections[overKey];
+    const underSel = selections[underKey];
 
-    const gameHasPick = spreadSelA || ouSelO || ouSelU;
-    const gameHasLock = lockKey && (lockKey === spreadKeyA || lockKey === ouKeyO || lockKey === ouKeyU);
-
+    const gamePickKeys = [spreadKey, overKey, underKey].filter(k => selections[k]);
+    const gameHasPick = gamePickKeys.length > 0;
+    const gameHasLock = gamePickKeys.some(k => k === lockKey);
     const maxed = selCount >= maxPicks;
 
     function btnClass(key, side) {
@@ -106,82 +88,140 @@ export default function PicksScreen({ week, myPicks, onPicksSubmitted, showToast
       return `pick-btn ${lockKey === key ? 'is-lock' : 'selected'}`;
     }
 
+    // When game has both spread + O/U picked, show lock selector between them
+    const bothPicked = spreadSel && (overSel || underSel);
+
     return (
-      <div className={`card ${gameHasPick ? 'picked' : ''}`}>
-        <div className="card-header">
-          <span>{game.tv_network && `${game.tv_network} · `}{game.game_time ? new Date(game.game_time).toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }) : 'TBD'}</span>
+      <div className={`card ${gameHasPick ? 'picked' : ''}`} style={{marginBottom:'7px'}}>
+        <div className="card-header" style={{padding:'5px 10px'}}>
+          <span>{game.tv_network ? `${game.tv_network} · ` : ''}{game.game_time ? new Date(game.game_time).toLocaleString('en-US', { weekday:'short', month:'numeric', day:'numeric', hour:'numeric', minute:'2-digit' }) : 'TBD'}</span>
           <span>{game.conference}</span>
         </div>
-        <div className="matchup">
-          <div className="team">
-            <div className="team-name">{game.away_team}</div>
-            {game.away_record && <div className="team-record">{game.away_record}</div>}
+
+        {/* Compact matchup */}
+        <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', padding:'6px 10px 4px', gap:'6px'}}>
+          <div style={{flex:1, textAlign:'center'}}>
+            <div style={{fontSize:'12px', fontWeight:'500', color:'var(--black)', lineHeight:1.2}}>{game.away_team}</div>
           </div>
-          <div className="vs-mid">at</div>
-          <div className="team">
-            <div className="team-name">{game.home_team}</div>
-            {game.home_record && <div className="team-record">{game.home_record}</div>}
+          <div style={{fontSize:'10px', color:'var(--hint)', flexShrink:0}}>@</div>
+          <div style={{flex:1, textAlign:'center'}}>
+            <div style={{fontSize:'12px', fontWeight:'500', color:'var(--black)', lineHeight:1.2}}>{game.home_team}</div>
           </div>
         </div>
 
-        <div className="pick-options">
+        <div style={{padding:'0 8px 8px', display:'flex', flexDirection:'column', gap:'4px'}}>
+          {/* Spread row */}
           {game.spread_away != null && (
-            <>
-              <div className="pick-type-label">Spread</div>
-              <div className="pick-row">
-                <button
-                  className={btnClass(spreadKeyA, game.away_team)}
-                  onClick={() => selectPick(game, 'spread', game.away_team, game.away_team, `${game.away_team} ${game.spread_away > 0 ? '+' : ''}${game.spread_away}`)}
-                  disabled={locked || (maxed && !selections[spreadKeyA])}
-                >
-                  <div className="btn-team">{game.away_team}</div>
-                  <div className="btn-line">{game.spread_away > 0 ? '+' : ''}{game.spread_away}</div>
-                </button>
-                <button
-                  className={btnClass(spreadKeyA, game.home_team)}
-                  onClick={() => selectPick(game, 'spread', game.home_team, game.home_team, `${game.home_team} ${game.spread_home > 0 ? '+' : ''}${game.spread_home}`)}
-                  disabled={locked || (maxed && !selections[spreadKeyA])}
-                >
-                  <div className="btn-team">{game.home_team}</div>
-                  <div className="btn-line">{game.spread_home > 0 ? '+' : ''}{game.spread_home}</div>
-                </button>
-              </div>
-            </>
-          )}
-
-          {game.total != null && (
-            <>
-              <div className="pick-type-label" style={{marginTop:'3px'}}>Over / Under · {game.total}</div>
-              <div className="pick-row">
-                <button
-                  className={btnClass(ouKeyO, 'over')}
-                  onClick={() => selectPick(game, 'over', 'over', 'over', `Over ${game.total} (${game.away_team}/${game.home_team})`)}
-                  disabled={locked || (maxed && !selections[ouKeyO])}
-                >
-                  <div className="btn-team">Over</div>
-                  <div className="btn-line">{game.total}</div>
-                </button>
-                <button
-                  className={btnClass(ouKeyU, 'under')}
-                  onClick={() => selectPick(game, 'under', 'under', 'under', `Under ${game.total} (${game.away_team}/${game.home_team})`)}
-                  disabled={locked || (maxed && !selections[ouKeyU])}
-                >
-                  <div className="btn-team">Under</div>
-                  <div className="btn-line">{game.total}</div>
-                </button>
-              </div>
-            </>
-          )}
-
-          {gameHasPick && !locked && (
-            <div className="lock-section">
-              <span className="lock-hint">🔒 Set as Lead Pipe Lock?</span>
+            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'5px'}}>
               <button
-                className={`lock-btn ${gameHasLock ? 'active' : ''}`}
-                onClick={() => toggleLock(game.id)}
+                className={btnClass(spreadKey, game.away_team)}
+                style={{padding:'7px 6px'}}
+                onClick={() => selectPick(game, 'spread', game.away_team, game.away_team, `${game.away_team} ${game.spread_away > 0 ? '+' : ''}${game.spread_away}`)}
+                disabled={locked || (maxed && !selections[spreadKey])}
               >
-                {gameHasLock ? 'Lock set ✓' : 'Make Lock'}
+                <div className="btn-team" style={{fontSize:'12px'}}>{game.away_team}</div>
+                <div className="btn-line" style={{fontSize:'11px'}}>{game.spread_away > 0 ? '+' : ''}{game.spread_away}</div>
               </button>
+              <button
+                className={btnClass(spreadKey, game.home_team)}
+                style={{padding:'7px 6px'}}
+                onClick={() => selectPick(game, 'spread', game.home_team, game.home_team, `${game.home_team} ${game.spread_home > 0 ? '+' : ''}${game.spread_home}`)}
+                disabled={locked || (maxed && !selections[spreadKey])}
+              >
+                <div className="btn-team" style={{fontSize:'12px'}}>{game.home_team}</div>
+                <div className="btn-line" style={{fontSize:'11px'}}>{game.spread_home > 0 ? '+' : ''}{game.spread_home}</div>
+              </button>
+            </div>
+          )}
+
+          {/* O/U row */}
+          {game.total != null && (
+            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'5px'}}>
+              <button
+                className={btnClass(overKey, 'over')}
+                style={{padding:'7px 6px'}}
+                onClick={() => selectPick(game, 'over', 'over', 'over', `Over ${game.total} (${game.away_team}/${game.home_team})`)}
+                disabled={locked || (maxed && !selections[overKey])}
+              >
+                <div className="btn-team" style={{fontSize:'12px'}}>Over</div>
+                <div className="btn-line" style={{fontSize:'11px'}}>{game.total}</div>
+              </button>
+              <button
+                className={btnClass(underKey, 'under')}
+                style={{padding:'7px 6px'}}
+                onClick={() => selectPick(game, 'under', 'under', 'under', `Under ${game.total} (${game.away_team}/${game.home_team})`)}
+                disabled={locked || (maxed && !selections[underKey])}
+              >
+                <div className="btn-team" style={{fontSize:'12px'}}>Under</div>
+                <div className="btn-line" style={{fontSize:'11px'}}>{game.total}</div>
+              </button>
+            </div>
+          )}
+
+          {/* Lock section */}
+          {gameHasPick && !locked && (
+            <div style={{
+              marginTop:'2px', borderTop:'0.5px solid var(--card-border)',
+              paddingTop:'6px', display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap'
+            }}>
+              <span style={{fontSize:'11px', color:'var(--sub)', flex: bothPicked ? 'none' : 1}}>
+                🔒 Lead Pipe Lock?
+              </span>
+
+              {/* If both spread and O/U picked — show which pick to lock */}
+              {bothPicked ? (
+                <div style={{display:'flex', gap:'5px', flexWrap:'wrap', flex:1}}>
+                  {/* Spread lock option */}
+                  <button
+                    onClick={() => setLockKey(prev => prev === spreadKey ? null : spreadKey)}
+                    style={{
+                      fontSize:'11px', padding:'4px 10px', borderRadius:'20px', cursor:'pointer',
+                      fontFamily:'var(--font)', fontWeight:'500', flex:1, textAlign:'center',
+                      background: lockKey === spreadKey ? 'var(--black)' : 'transparent',
+                      color: lockKey === spreadKey ? 'var(--gold-border)' : 'var(--black)',
+                      border: lockKey === spreadKey ? '1.5px solid var(--black)' : '1.5px solid var(--card-border)',
+                    }}
+                  >
+                    {spreadSel.side === game.away_team
+                      ? `${game.away_team} ${game.spread_away > 0 ? '+' : ''}${game.spread_away}`
+                      : `${game.home_team} ${game.spread_home > 0 ? '+' : ''}${game.spread_home}`
+                    }
+                  </button>
+                  {/* O/U lock option */}
+                  {(() => {
+                    const ouKey = overSel ? overKey : underKey;
+                    const ouLabel = overSel ? `Over ${game.total}` : `Under ${game.total}`;
+                    return (
+                      <button
+                        onClick={() => setLockKey(prev => prev === ouKey ? null : ouKey)}
+                        style={{
+                          fontSize:'11px', padding:'4px 10px', borderRadius:'20px', cursor:'pointer',
+                          fontFamily:'var(--font)', fontWeight:'500', flex:1, textAlign:'center',
+                          background: lockKey === ouKey ? 'var(--black)' : 'transparent',
+                          color: lockKey === ouKey ? 'var(--gold-border)' : 'var(--black)',
+                          border: lockKey === ouKey ? '1.5px solid var(--black)' : '1.5px solid var(--card-border)',
+                        }}
+                      >
+                        {ouLabel}
+                      </button>
+                    );
+                  })()}
+                </div>
+              ) : (
+                /* Single pick — simple toggle */
+                <button
+                  onClick={() => setLockKey(prev => prev === gamePickKeys[0] ? null : gamePickKeys[0])}
+                  style={{
+                    fontSize:'11px', padding:'5px 14px', borderRadius:'20px', cursor:'pointer',
+                    fontFamily:'var(--font)', fontWeight:'500',
+                    background: gameHasLock ? 'var(--black)' : 'transparent',
+                    color: gameHasLock ? 'var(--gold-border)' : 'var(--black)',
+                    border: gameHasLock ? '1.5px solid var(--black)' : '1.5px solid var(--black)',
+                  }}
+                >
+                  {gameHasLock ? 'Lock set ✓' : 'Make Lock'}
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -190,7 +230,7 @@ export default function PicksScreen({ week, myPicks, onPicksSubmitted, showToast
   }
 
   return (
-    <div>
+    <div style={{paddingBottom: readyToSubmit ? '80px' : '16px'}}>
       {locked && (
         <div className="lock-msg">
           <span>🔒</span>
@@ -198,21 +238,9 @@ export default function PicksScreen({ week, myPicks, onPicksSubmitted, showToast
         </div>
       )}
 
-      {!locked && selCount > 0 && (
-        <div className="pick-summary">
-          {Object.entries(selections).map(([key, val]) => (
-            <div key={key} className={`ps-chip ${lockKey === key ? 'is-lock' : ''}`}>
-              {lockKey === key && <span>🔒</span>}
-              <span>{val.label}</span>
-              <button onClick={() => removePick(key)}>×</button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {selCount >= maxPicks && !locked && (
+      {selCount >= maxPicks && !locked && !lockKey && (
         <div className="maxed-banner">
-          {maxPicks} picks selected — remove one above to swap · {lockKey ? '✓ Lock set' : '⚠️ Set your Lock!'}
+          5 picks selected — now tap <strong>Make Lock</strong> on your most confident pick ⬇️
         </div>
       )}
 
@@ -230,14 +258,24 @@ export default function PicksScreen({ week, myPicks, onPicksSubmitted, showToast
         </>
       )}
 
+      {/* Floating submit button — slides up when 5 picks selected */}
       {!locked && (
-        <div className="submit-bar">
+        <div style={{
+          position:'fixed', bottom: readyToSubmit ? '70px' : '-100px',
+          left:'50%', transform:'translateX(-50%)',
+          transition:'bottom 0.3s ease',
+          zIndex:150, width:'calc(100% - 32px)', maxWidth:'358px',
+        }}>
           <button
             className="submit-btn"
-            disabled={selCount !== maxPicks || !lockKey || submitting}
+            disabled={!readyToSubmit || submitting}
             onClick={handleSubmit}
+            style={{
+              boxShadow:'0 4px 20px rgba(0,0,0,0.25)',
+              display:'flex', alignItems:'center', justifyContent:'center', gap:'8px'
+            }}
           >
-            {submitting ? 'Submitting...' : `Submit Picks (${selCount}/${maxPicks})`}
+            {submitting ? 'Submitting...' : `🏈 Submit ${selCount}/${maxPicks} Picks — Lock: ${lockKey ? selections[lockKey]?.label : '?'}`}
           </button>
         </div>
       )}
