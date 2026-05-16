@@ -58,17 +58,20 @@ export default function App() {
               {initials}
             </div>
             {showProfile && (
-              <div style={{
-                position:'absolute', right:0, top:'42px', background:'#fff',
-                border:'0.5px solid var(--card-border)', borderRadius:'var(--radius)',
-                boxShadow:'0 4px 16px rgba(0,0,0,0.12)', zIndex:200, minWidth:'160px', overflow:'hidden'
-              }}>
+              <div
+                style={{
+                  position:'absolute', right:0, top:'42px', background:'#fff',
+                  border:'0.5px solid var(--card-border)', borderRadius:'var(--radius)',
+                  boxShadow:'0 4px 16px rgba(0,0,0,0.12)', zIndex:200, minWidth:'160px', overflow:'hidden'
+                }}
+                onClick={e => e.stopPropagation()}
+              >
                 <div style={{padding:'12px 14px', borderBottom:'0.5px solid var(--card-border)'}}>
                   <div style={{fontSize:'13px', fontWeight:'500', color:'var(--black)'}}>{user?.name}</div>
                   <div style={{fontSize:'11px', color:'var(--hint)'}}>@{user?.username}</div>
                 </div>
                 <button
-                  onClick={() => { setShowProfile(false); logout(); }}
+                  onPointerDown={e => { e.stopPropagation(); setShowProfile(false); logout(); }}
                   style={{
                     width:'100%', padding:'11px 14px', background:'none', border:'none',
                     textAlign:'left', fontSize:'13px', color:'var(--red)', cursor:'pointer',
@@ -103,7 +106,7 @@ export default function App() {
 
       {/* Overlay to close profile menu */}
       {showProfile && (
-        <div style={{position:'fixed',inset:0,zIndex:199}} onClick={() => setShowProfile(false)} />
+        <div style={{position:'fixed',inset:0,zIndex:199}} onPointerDown={() => setShowProfile(false)} />
       )}
 
       <main className="screen">
@@ -111,7 +114,7 @@ export default function App() {
           <PicksScreen
             week={week}
             myPicks={myPicks}
-            onPicksSubmitted={async () => { showToast('Picks submitted! 🎯'); await loadWeek(); }}
+            onPicksSubmitted={async () => { showToast(myPicks?.length > 0 ? 'Picks updated! ✏️' : 'Picks submitted! 🎯'); await loadWeek(); }}
             showToast={showToast}
           />
         )}
