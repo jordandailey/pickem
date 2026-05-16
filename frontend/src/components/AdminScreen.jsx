@@ -565,6 +565,44 @@ function OddsImport({ week, onDone, showToast, onBack }) {
         >
           {importing ? 'Fetching...' : '📊 Fetch & Grade Final Scores'}
         </button>
+
+        <div style={{borderTop:'0.5px solid var(--card-border)', margin:'12px 0 8px', paddingTop:'12px'}}>
+          <div style={{fontSize:'11px', color:'var(--hint)', marginBottom:'8px', textTransform:'uppercase', letterSpacing:'0.5px'}}>🧪 Test pipeline with NBA (off-season only)</div>
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px'}}>
+            <button
+              className="btn btn-secondary"
+              onClick={async () => {
+                setImporting(true);
+                try {
+                  const data = await api.post('/odds/test-import', {});
+                  setResult(data);
+                  showToast(data.message || 'NBA games imported');
+                  if (data.success) setTimeout(onDone, 1500);
+                } catch(err) { showToast(err.message, 'error'); }
+                finally { setImporting(false); }
+              }}
+              disabled={importing || !week}
+              style={{fontSize:'12px'}}
+            >
+              🏀 Import NBA Lines
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={async () => {
+                setImporting(true);
+                try {
+                  const data = await api.post('/odds/test-scores', {});
+                  showToast(data.message || `Graded ${data.graded} games`);
+                } catch(err) { showToast(err.message, 'error'); }
+                finally { setImporting(false); }
+              }}
+              disabled={importing}
+              style={{fontSize:'12px'}}
+            >
+              📊 Grade NBA Scores
+            </button>
+          </div>
+        </div>
         <button
           className="btn btn-secondary btn-full"
           onClick={checkStatus}
