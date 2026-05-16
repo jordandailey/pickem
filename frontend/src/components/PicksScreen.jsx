@@ -15,6 +15,7 @@ export default function PicksScreen({ week, myPicks, onPicksSubmitted, showToast
   const selCount = Object.keys(selections).length;
   const maxPicks = week?.picks_per_week || 5;
   const readyToSubmit = selCount === maxPicks && lockKey;
+  const hasExistingPicks = myPicks?.length > 0;
 
   useEffect(() => {
     if (!myPicks?.length || !week) return;
@@ -238,6 +239,17 @@ export default function PicksScreen({ week, myPicks, onPicksSubmitted, showToast
         </div>
       )}
 
+      {hasExistingPicks && !locked && (
+        <div style={{
+          background:'#FDF6E3', border:'0.5px solid #D4AF37', borderRadius:'var(--radius-sm)',
+          padding:'9px 12px', marginBottom:'8px', fontSize:'12px', color:'#8a6a00',
+          display:'flex', alignItems:'center', gap:'8px'
+        }}>
+          <span>✏️</span>
+          <span>You've already submitted this week. Any changes will replace your picks when you resubmit.</span>
+        </div>
+      )}
+
       {selCount >= maxPicks && !locked && !lockKey && (
         <div className="maxed-banner">
           5 picks selected — now tap <strong>Make Lock</strong> on your most confident pick ⬇️
@@ -275,7 +287,7 @@ export default function PicksScreen({ week, myPicks, onPicksSubmitted, showToast
               display:'flex', alignItems:'center', justifyContent:'center', gap:'8px'
             }}
           >
-            {submitting ? 'Submitting...' : `🏈 Submit ${selCount}/${maxPicks} Picks — Lock: ${lockKey ? selections[lockKey]?.label : '?'}`}
+            {submitting ? (hasExistingPicks ? 'Updating...' : 'Submitting...') : (hasExistingPicks ? `✏️ Update Picks — Lock: ${lockKey ? selections[lockKey]?.label : '?'}` : `🏈 Submit ${selCount}/${maxPicks} Picks — Lock: ${lockKey ? selections[lockKey]?.label : '?'}`)}
           </button>
         </div>
       )}
