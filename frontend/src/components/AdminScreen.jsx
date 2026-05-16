@@ -17,6 +17,8 @@ export default function AdminScreen({ week, onWeekUpdated, showToast }) {
   if (panel === 'scores') return <ScoreEntry week={week} onDone={() => { onWeekUpdated(); setPanel('home'); }} showToast={showToast} onBack={() => setPanel('home')} />;
   if (panel === 'players') return <PlayerManager players={players} onDone={loadPlayers} showToast={showToast} onBack={() => setPanel('home')} />;
   if (panel === 'settings') return <SeasonSettings showToast={showToast} onBack={() => setPanel('home')} />;
+  if (panel === 'odds') return <OddsImport week={week} onDone={() => { onWeekUpdated(); setPanel('home'); }} showToast={showToast} onBack={() => setPanel('home')} />;
+  if (panel === 'override') return <PickOverride week={week} showToast={showToast} onBack={() => setPanel('home')} />;
 
   return (
     <div>
@@ -44,10 +46,21 @@ export default function AdminScreen({ week, onWeekUpdated, showToast }) {
         </div>
       )}
 
+      {/* Odds API Import */}
+      <button className="admin-btn" style={{borderColor:'var(--gold-border)', background:'#FDF6E3'}} onClick={() => setPanel('odds')}>
+        <span className="admin-btn-icon">🔄</span>
+        <div className="admin-btn-text">
+          <div className="admin-btn-title" style={{color:'var(--gold)'}}>Import lines from DraftKings</div>
+          <div className="admin-btn-sub">Auto-pull this week's spreads + O/U via Odds API</div>
+        </div>
+        <span className="admin-btn-chevron">›</span>
+      </button>
+
       {[
         { id: 'week', icon: '📅', title: 'Set up new week', sub: 'Create week, set deadline, assign quarter' },
         { id: 'games', icon: '🏈', title: 'Add / edit games', sub: 'Enter the slate of games for this week' },
         { id: 'scores', icon: '📊', title: 'Enter final scores', sub: 'Grade all picks automatically' },
+        { id: 'override', icon: '✏️', title: 'Override pick results', sub: 'Manually correct any graded pick' },
         { id: 'players', icon: '👥', title: 'Manage players', sub: 'Add, remove, reset passwords' },
         { id: 'settings', icon: '⚙️', title: 'Season settings', sub: 'Prizes, scoring rules, picks per week' },
       ].map(b => (
@@ -483,6 +496,203 @@ function SeasonSettings({ showToast, onBack }) {
           {saving ? 'Saving...' : 'Save Settings'}
         </button>
       </div>
+    </div>
+  );
+}
+
+function OddsImport({ week, onDone, showToast, onBack }) {
+  const [importing, setImporting] = useState(false);
+  const [result, setResult] = useState(null);
+  const [status, setStatus] = useState(null);
+  const [checkingStatus, setCheckingStatus] = useState(false);
+
+  async function checkStatus() {
+    setCheckingStatus(true);
+    try {
+      const data = await api.get('/odds/status');
+      setStatus(data);
+    } catch (err) { showToast(err.message, 'error'); }
+    finally { setCheckingStatus(false); }
+  }
+
+  async function importOdds() {
+    if (!week) return showToast('Create an active week first', 'error');
+    setImporting(true);
+    setResult(null);
+    try {
+      const data = await api.post('/odds/import', {});
+      setResult(data);
+      showToast(`Imported ${data.imported} games ✓`);
+      setTimeout(onDone, 1500);
+    } catch (err) { showToast(err.message, 'error'); }
+    finally { setImporting(false); }
+  }
+
+  async function fetchScores() {
+    setImporting(true);
+    try {
+      const data = await api.post('/odds/scores', {});
+      showToast(`Graded ${data.graded} games ✓`);
+    } catch (err) { showToast(err.message, 'error'); }
+    finally { setImporting(false); }
+  }
+
+  return (
+    <div>
+      <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'16px'}}>
+        <button className="btn btn-secondary" onClick={onBack}>← Back</button>
+        <p className="sec-label" style={{margin:0}}>DraftKings Lines Import</p>
+      </div>
+
+      <div className="card" style={{padding:'16px', marginBottom:'10px'}}>
+        <div style={{fontSize:'13px', color:'var(--sub)', marginBottom:'12px', lineHeight:'1.5'}}>
+          Pulls this week's spreads and O/U from DraftKings via the Odds API.
+          {week ? ` Will populate games for NFL Wk ${week.nfl_week}.` : ' ⚠️ No active week — create one first.'}
+        </div>
+        <button
+          className="btn btn-primary btn-full"
+          onClick={importOdds}
+          disabled={importing || !week}
+          style={{marginBottom:'8px'}}
+        >
+          {importing ? '🔄 Importing...' : '🔄 Import Lines Now'}
+        </button>
+        <button
+          className="btn btn-secondary btn-full"
+          onClick={fetchScores}
+          disabled={importing}
+          style={{marginBottom:'8px'}}
+        >
+          {importing ? 'Fetching...' : '📊 Fetch & Grade Final Scores'}
+        </button>
+        <button
+          className="btn btn-secondary btn-full"
+          onClick={checkStatus}
+          disabled={checkingStatus}
+        >
+          {checkingStatus ? 'Checking...' : '📈 Check API Quota'}
+        </button>
+      </div>
+
+      {result && (
+        <div className="card" style={{padding:'12px'}}>
+          <div style={{fontSize:'13px', fontWeight:'500', color:'var(--green)', marginBottom:'4px'}}>✓ Import successful</div>
+          <div style={{fontSize:'12px', color:'var(--sub)'}}>
+            {result.nfl} NFL games · {result.cfb} CFB games (Power 4 + Notre Dame)
+          </div>
+        </div>
+      )}
+
+      {status && (
+        <div className="card" style={{padding:'12px'}}>
+          <div style={{fontSize:'12px', color:'var(--sub)'}}>
+            <div>Requests used: <strong>{status.requests_used}</strong></div>
+            <div>Requests remaining: <strong style={{color: parseInt(status.requests_remaining) < 50 ? 'var(--red)' : 'var(--green)'}}>{status.requests_remaining}</strong></div>
+            <div>Last call used: <strong>{status.requests_last}</strong></div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PickOverride({ week, showToast, onBack }) {
+  const [picks, setPicks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(null);
+  const [filter, setFilter] = useState('all');
+
+  useEffect(() => {
+    if (!week) return;
+    loadPicks();
+  }, [week, filter]);
+
+  async function loadPicks() {
+    setLoading(true);
+    try {
+      const data = await api.get(`/picks/dashboard/${week.id}`);
+      let p = data.picks || [];
+      if (filter !== 'all') p = p.filter(x => x.result === filter || (!x.result && filter === 'pending'));
+      setPicks(p);
+    } catch (err) { showToast(err.message, 'error'); }
+    finally { setLoading(false); }
+  }
+
+  async function override(pickId, result) {
+    setSaving(pickId);
+    try {
+      await api.put(`/picks/${pickId}/override`, { result });
+      showToast('Pick updated ✓');
+      await loadPicks();
+    } catch (err) { showToast(err.message, 'error'); }
+    finally { setSaving(null); }
+  }
+
+  if (!week) return (
+    <div>
+      <button className="btn btn-secondary" onClick={onBack} style={{marginBottom:'16px'}}>← Back</button>
+      <div className="empty-state">No active week.</div>
+    </div>
+  );
+
+  return (
+    <div>
+      <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'12px'}}>
+        <button className="btn btn-secondary" onClick={onBack}>← Back</button>
+        <p className="sec-label" style={{margin:0}}>Override picks · Wk {week.nfl_week}</p>
+      </div>
+      <div className="pills" style={{marginBottom:'10px'}}>
+        {['all','pending','win','loss','push'].map(f => (
+          <button key={f} className={`pill ${filter === f ? 'active' : ''}`} onClick={() => setFilter(f)}>
+            {f.charAt(0).toUpperCase() + f.slice(1)}
+          </button>
+        ))}
+      </div>
+      {loading && <div className="empty-state">Loading...</div>}
+      {!loading && picks.length === 0 && <div className="empty-state">No picks found.</div>}
+      {!loading && picks.map(p => (
+        <div key={p.id} className="card" style={{padding:'10px 12px', marginBottom:'6px'}}>
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'6px'}}>
+            <div>
+              <div style={{fontSize:'13px', fontWeight:'500', color:'var(--black)'}}>{p.player_name}</div>
+              <div style={{fontSize:'11px', color:'var(--hint)'}}>
+                {p.pick_type === 'spread' ? p.picked_team : p.pick_type === 'over' ? `Over ${p.total}` : `Under ${p.total}`}
+                {p.is_lock ? ' 🔒' : ''} · {p.away_team} vs {p.home_team}
+              </div>
+            </div>
+            <span className={`badge ${p.result === 'win' ? 'win' : p.result === 'loss' ? 'loss' : p.result === 'push' ? 'push' : 'pending'}`}>
+              {p.result || 'pending'}
+            </span>
+          </div>
+          <div style={{display:'flex', gap:'5px'}}>
+            {['win','loss','push','void'].map(r => (
+              <button
+                key={r}
+                onClick={() => override(p.id, r)}
+                disabled={saving === p.id || p.result === r}
+                style={{
+                  flex:1, padding:'5px 4px', fontSize:'11px', fontWeight:'500',
+                  borderRadius:'6px', border:'0.5px solid',
+                  cursor: p.result === r ? 'default' : 'pointer',
+                  fontFamily:'var(--font)',
+                  background: p.result === r
+                    ? (r === 'win' ? 'var(--gbg)' : r === 'loss' ? 'var(--rbg)' : '#F0EDE8')
+                    : 'var(--card)',
+                  color: p.result === r
+                    ? (r === 'win' ? 'var(--green)' : r === 'loss' ? 'var(--red)' : 'var(--sub)')
+                    : 'var(--sub)',
+                  borderColor: p.result === r
+                    ? (r === 'win' ? 'var(--gbd)' : r === 'loss' ? 'var(--rbd)' : 'var(--card-border)')
+                    : 'var(--card-border)',
+                  opacity: saving === p.id ? 0.5 : 1,
+                }}
+              >
+                {r.charAt(0).toUpperCase() + r.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
