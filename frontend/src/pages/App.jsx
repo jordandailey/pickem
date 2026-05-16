@@ -26,7 +26,6 @@ export default function App() {
   const [week, setWeek] = useState(null);
   const [myPicks, setMyPicks] = useState([]);
   const [toast, setToast] = useState(null);
-  const [showProfile, setShowProfile] = useState(false);
 
   useEffect(() => { loadWeek(); }, []);
 
@@ -53,36 +52,7 @@ export default function App() {
       <header className="app-header">
         <div className="app-header-top">
           <h1>Pick'em</h1>
-          <div style={{position:'relative'}}>
-            <div className="avatar" title={user?.name} onClick={() => setShowProfile(p => !p)}>
-              {initials}
-            </div>
-            {showProfile && (
-              <div
-                style={{
-                  position:'absolute', right:0, top:'42px', background:'#fff',
-                  border:'0.5px solid var(--card-border)', borderRadius:'var(--radius)',
-                  boxShadow:'0 4px 16px rgba(0,0,0,0.12)', zIndex:200, minWidth:'160px', overflow:'hidden'
-                }}
-                onClick={e => e.stopPropagation()}
-              >
-                <div style={{padding:'12px 14px', borderBottom:'0.5px solid var(--card-border)'}}>
-                  <div style={{fontSize:'13px', fontWeight:'500', color:'var(--black)'}}>{user?.name}</div>
-                  <div style={{fontSize:'11px', color:'var(--hint)'}}>@{user?.username}</div>
-                </div>
-                <button
-                  onPointerDown={e => { e.stopPropagation(); setShowProfile(false); logout(); }}
-                  style={{
-                    width:'100%', padding:'11px 14px', background:'none', border:'none',
-                    textAlign:'left', fontSize:'13px', color:'var(--red)', cursor:'pointer',
-                    fontFamily:'var(--font)'
-                  }}
-                >
-                  Sign out
-                </button>
-              </div>
-            )}
-          </div>
+          <div className="avatar" title={user?.name}>{initials}</div>
         </div>
         {week && (
           <div className="week-row">
@@ -103,11 +73,6 @@ export default function App() {
           </div>
         )}
       </header>
-
-      {/* Overlay to close profile menu */}
-      {showProfile && (
-        <div style={{position:'fixed',inset:0,zIndex:199}} onPointerDown={() => setShowProfile(false)} />
-      )}
 
       <main className="screen">
         {tab === 'picks' && (
@@ -140,6 +105,10 @@ export default function App() {
             {t.label}
           </button>
         ))}
+        <button className="nav-item" onClick={logout} style={{color:'var(--red)'}}>
+          <span className="nav-icon">↩️</span>
+          Sign out
+        </button>
       </nav>
 
       {toast && <div className={`toast ${toast.type}`}>{toast.msg}</div>}
