@@ -15,10 +15,7 @@ function formatDeadline(dt) {
   if (diff < 0) return 'Picks locked';
   const h = Math.floor(diff / 3600000);
   const m = Math.floor((diff % 3600000) / 60000);
-  if (h > 48) {
-    const days = Math.floor(h / 24);
-    return `${days}d ${h % 24}h left`;
-  }
+  if (h > 48) { const days = Math.floor(h / 24); return `${days}d ${h % 24}h left`; }
   if (h > 0) return `${h}h ${m}m left`;
   return `${m}m left`;
 }
@@ -29,10 +26,9 @@ export default function App() {
   const [week, setWeek] = useState(null);
   const [myPicks, setMyPicks] = useState([]);
   const [toast, setToast] = useState(null);
+  const [showProfile, setShowProfile] = useState(false);
 
-  useEffect(() => {
-    loadWeek();
-  }, []);
+  useEffect(() => { loadWeek(); }, []);
 
   async function loadWeek() {
     try {
@@ -42,9 +38,7 @@ export default function App() {
         const picks = await api.get(`/picks/my/${data.id}`);
         setMyPicks(picks);
       }
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
+    } catch (err) { showToast(err.message, 'error'); }
   }
 
   function showToast(msg, type = 'success') {
@@ -53,50 +47,71 @@ export default function App() {
   }
 
   const initials = user?.name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-  const pickCount = myPicks.filter(p => p.week_id === week?.id).length;
 
   return (
     <div className="app-shell">
       <header className="app-header">
         <div className="app-header-top">
           <h1>Pick'em</h1>
-          <div className="avatar" title={user?.name} onClick={() => setTab('profile')}>
-            {initials}
+          <div style={{position:'relative'}}>
+            <div className="avatar" title={user?.name} onClick={() => setShowProfile(p => !p)}>
+              {initials}
+            </div>
+            {showProfile && (
+              <div style={{
+                position:'absolute', right:0, top:'42px', background:'#fff',
+                border:'0.5px solid var(--card-border)', borderRadius:'var(--radius)',
+                boxShadow:'0 4px 16px rgba(0,0,0,0.12)', zIndex:200, minWidth:'160px', overflow:'hidden'
+              }}>
+                <div style={{padding:'12px 14px', borderBottom:'0.5px solid var(--card-border)'}}>
+                  <div style={{fontSize:'13px', fontWeight:'500', color:'var(--black)'}}>{user?.name}</div>
+                  <div style={{fontSize:'11px', color:'var(--hint)'}}>@{user?.username}</div>
+                </div>
+                <button
+                  onClick={() => { setShowProfile(false); logout(); }}
+                  style={{
+                    width:'100%', padding:'11px 14px', background:'none', border:'none',
+                    textAlign:'left', fontSize:'13px', color:'var(--red)', cursor:'pointer',
+                    fontFamily:'var(--font)'
+                  }}
+                >
+                  Sign out
+                </button>
+              </div>
+            )}
           </div>
         </div>
         {week && (
-          <>
-            <div className="week-row">
-              <div className="week-badge">
-                <div className="week-dot" />
-                <span>NFL Wk {week.nfl_week} · CFB Wk {week.cfb_week}</span>
-              </div>
-              <div className="deadline-chip">
-                ⏱ {formatDeadline(week.submission_deadline)}
-              </div>
+          <div className="week-row">
+            <div className="week-badge">
+              <div className="week-dot" />
+              <span>NFL Wk {week.nfl_week} · CFB Wk {week.cfb_week}</span>
             </div>
-            {tab === 'picks' && (
-              <>
-                <div className="picks-track">
-                  {[0,1,2,3,4].map(i => (
-                    <div key={i} className={`pick-dot ${i < myPicks.length ? (myPicks[i]?.is_lock ? 'locked' : 'filled') : ''}`} />
-                  ))}
-                </div>
-              </>
-            )}
-          </>
+            <div className="deadline-chip">
+              ⏱ {formatDeadline(week.submission_deadline)}
+            </div>
+          </div>
+        )}
+        {tab === 'picks' && week && (
+          <div className="picks-track">
+            {[0,1,2,3,4].map(i => (
+              <div key={i} className={`pick-dot ${i < myPicks.length ? (myPicks[i]?.is_lock ? 'locked' : 'filled') : ''}`} />
+            ))}
+          </div>
         )}
       </header>
+
+      {/* Overlay to close profile menu */}
+      {showProfile && (
+        <div style={{position:'fixed',inset:0,zIndex:199}} onClick={() => setShowProfile(false)} />
+      )}
 
       <main className="screen">
         {tab === 'picks' && (
           <PicksScreen
             week={week}
             myPicks={myPicks}
-            onPicksSubmitted={async () => {
-              showToast('Picks submitted! 🎯');
-              await loadWeek();
-            }}
+            onPicksSubmitted={async () => { showToast('Picks submitted! 🎯'); await loadWeek(); }}
             showToast={showToast}
           />
         )}
