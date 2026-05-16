@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
+
 import { useAuth } from '../context/AuthContext';
 import { api } from '../utils/api';
 import PicksScreen from '../components/PicksScreen';
@@ -6,6 +7,47 @@ import StandingsScreen from '../components/StandingsScreen';
 import DashboardScreen from '../components/DashboardScreen';
 import MyPicksScreen from '../components/MyPicksScreen';
 import AdminScreen from '../components/AdminScreen';
+import ProfileScreen from '../components/ProfileScreen';
+
+const SPONSOR_LOGOS = [
+  { url: 'https://images.squarespace-cdn.com/content/v1/67927542fd3fea4f35716fa6/f58f95f2-5ea5-44c6-931c-6c3df795c8c2/Logo+TC+-+new.jpg?format=1500w', alt: 'TC' },
+  { url: 'https://www.simplegreenslandscaping.com/wp-content/uploads/2023/12/simplegreenslogo.png', alt: 'Simple Greens' },
+  { url: 'https://bluewebercapital.com/wp-content/uploads/2025/10/BlueWeberCapital-Logo-11.png', alt: 'Blue Weber Capital' },
+];
+
+function SponsorTicker() {
+  const [current, setCurrent] = React.useState(0);
+  const [fading, setFading] = React.useState(false);
+
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      setFading(true);
+      setTimeout(() => {
+        setCurrent(c => (c + 1) % SPONSOR_LOGOS.length);
+        setFading(false);
+      }, 400);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div style={{display:'flex', alignItems:'center', gap:'6px', flexShrink:0}}>
+      <span style={{fontSize:'9px', color:'#666', whiteSpace:'nowrap', letterSpacing:'0.3px', textTransform:'uppercase'}}>Brought to you by</span>
+      <div style={{width:'60px', height:'24px', position:'relative', overflow:'hidden'}}>
+        <img
+          src={SPONSOR_LOGOS[current].url}
+          alt={SPONSOR_LOGOS[current].alt}
+          style={{
+            height:'24px', width:'60px', objectFit:'contain',
+            opacity: fading ? 0 : 1,
+            transition: 'opacity 0.4s ease',
+            filter: 'brightness(0) invert(1)',
+          }}
+        />
+      </div>
+    </div>
+  );
+}
 
 function formatDeadline(dt) {
   if (!dt) return '';
@@ -47,12 +89,25 @@ export default function App() {
 
   const initials = user?.name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
+  // Profile screen overrides everything
+  if (tab === 'profile') {
+    return <ProfileScreen onBack={() => setTab('picks')} />;
+  }
+
   return (
     <div className="app-shell">
       <header className="app-header">
         <div className="app-header-top">
           <h1>Pick'em</h1>
-          <div className="avatar" title={user?.name}>{initials}</div>
+          <SponsorTicker />
+          <div
+            className="avatar"
+            title={user?.name}
+            onClick={() => setTab('profile')}
+            style={{cursor:'pointer'}}
+          >
+            {initials}
+          </div>
         </div>
         {week && (
           <div className="week-row">
@@ -79,7 +134,12 @@ export default function App() {
           <PicksScreen
             week={week}
             myPicks={myPicks}
-            onPicksSubmitted={async () => { showToast(myPicks?.length > 0 ? 'Picks updated! ✏️' : 'Picks submitted! 🎯'); await loadWeek(); }}
+            onPicksSubmitted={async () => {
+              const isUpdate = myPicks?.length > 0;
+              showToast(isUpdate ? 'Picks updated! ✏️' : 'Picks submitted! 🎯');
+              await loadWeek();
+              setTab('mypicks'); // Auto-navigate to My Picks
+            }}
             showToast={showToast}
           />
         )}
@@ -105,10 +165,6 @@ export default function App() {
             {t.label}
           </button>
         ))}
-        <button className="nav-item" onClick={logout} style={{color:'var(--red)'}}>
-          <span className="nav-icon">↩️</span>
-          Sign out
-        </button>
       </nav>
 
       {toast && <div className={`toast ${toast.type}`}>{toast.msg}</div>}
